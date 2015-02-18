@@ -1,5 +1,5 @@
 {
-  "name": "resumable.js",
+  "name": "resumable-node",
   "version": "0.0.1",
   "scripts": {
     "start": "node app.js"
