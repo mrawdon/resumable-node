@@ -64,7 +64,7 @@ module.exports = resumable = function(temporaryFolder, useSubDirectories){
   
   $.getChunkPath = function(identifier){
 	  if(useSubDirectories){
-		return path.join($.temporaryFolder, identifier);
+		return path.join($.temporaryFolder, cleanIdentifier(identifier));
 	  }
 	  else{
 		  return $.temporaryFolder;
