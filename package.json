@@ -1,6 +1,7 @@
 {
   "name": "resumable-node",
   "version": "0.0.1",
+  "main": "resumable-node.js"
   "scripts": {
     "start": "node app.js"
   },
