@@ -2,8 +2,9 @@ var fs = require('fs'), path = require('path'), util = require('util'), Stream =
 
 
 
-module.exports = resumable = function(temporaryFolder){
+module.exports = resumable = function(temporaryFolder, useSubDirectories){
   var $ = this;
+  $.useSubDirectories = useSubDirectories;
   $.temporaryFolder = temporaryFolder;
   $.maxFileSize = null;
   $.fileParameterName = 'file';
@@ -21,7 +22,7 @@ module.exports = resumable = function(temporaryFolder){
     // Clean up the identifier
     identifier = cleanIdentifier(identifier);
     // What would the file name be?
-    return path.join($.temporaryFolder, './resumable-'+identifier+'.'+chunkNumber);
+    return path.join($.temporaryFolder, identifier, './resumable-'+identifier+'.'+chunkNumber);
   }
 
   var validateRequest = function(chunkNumber, chunkSize, totalSize, identifier, filename, fileSize){
@@ -60,6 +61,16 @@ module.exports = resumable = function(temporaryFolder){
     return 'valid';
   }
 
+  
+  $.getChunkPath = function(identifier){
+	  if(useSubDirectories){
+		return path.join($.temporaryFolder, identifier);
+	  }
+	  else{
+		  return $.temporaryFolder;
+	  }
+  }
+  
   //'found', filename, original_filename, identifier
   //'not_found', null, null, null
   $.get = function(req, callback){
@@ -97,43 +108,50 @@ module.exports = resumable = function(temporaryFolder){
     var totalSize = fields['resumableTotalSize'];
     var identifier = cleanIdentifier(fields['resumableIdentifier']);
     var filename = fields['resumableFilename'];
+	var original_filename = fields['resumableIdentifier'];
+	  
+	var chunkFilePath = $.getChunkPath(identifier);
+	fs.exists(chunkFilePath, function(exists){
+		if(!exists){
+			return fs.mkdir(chunkFilePath, function(success){
+				$.post(req, callback);
+			});
+		}
+		if(!files[$.fileParameterName] || !files[$.fileParameterName].size) {
+		  callback('invalid_resumable_request', null, null, null);
+		  return;
+		}
+		var validation = validateRequest(chunkNumber, chunkSize, totalSize, identifier, files[$.fileParameterName].size);
+		if(validation=='valid') {
+		  var chunkFilename = getChunkFilename(chunkNumber, identifier);
+		  console.log('filena',chunkFilename);
+		  // Save the chunk (TODO: OVERWRITE)
+		  fs.rename(files[$.fileParameterName].path, chunkFilename, function(){
 
-		var original_filename = fields['resumableIdentifier'];
-
-    if(!files[$.fileParameterName] || !files[$.fileParameterName].size) {
-      callback('invalid_resumable_request', null, null, null);
-      return;
-    }
-    var validation = validateRequest(chunkNumber, chunkSize, totalSize, identifier, files[$.fileParameterName].size);
-    if(validation=='valid') {
-      var chunkFilename = getChunkFilename(chunkNumber, identifier);
-
-      // Save the chunk (TODO: OVERWRITE)
-      fs.rename(files[$.fileParameterName].path, chunkFilename, function(){
-
-        // Do we have all the chunks?
-        var currentTestChunk = 1;
-        var numberOfChunks = Math.max(Math.floor(totalSize/(chunkSize*1.0)), 1);
-        var testChunkExists = function(){
-              fs.exists(getChunkFilename(currentTestChunk, identifier), function(exists){
-                if(exists){
-                  currentTestChunk++;
-                  if(currentTestChunk>numberOfChunks) {
-                    callback('done', filename, original_filename, identifier);
-                  } else {
-                    // Recursion
-                    testChunkExists();
-                  }
-                } else {
-                  callback('partly_done', filename, original_filename, identifier);
-                }
-              });
-            }
-        testChunkExists();
-      });
-    } else {
-          callback(validation, filename, original_filename, identifier);
-    }
+			// Do we have all the chunks?
+			var currentTestChunk = 1;
+			var numberOfChunks = Math.max(Math.floor(totalSize/(chunkSize*1.0)), 1);
+			var testChunkExists = function(){
+				  fs.exists(getChunkFilename(currentTestChunk, identifier), function(exists){
+					if(exists){
+					  currentTestChunk++;
+					  if(currentTestChunk>numberOfChunks) {
+						callback('done', filename, original_filename, identifier);
+					  } else {
+						// Recursion
+						testChunkExists();
+					  }
+					} else {
+					  callback('partly_done', filename, original_filename, identifier);
+					}
+				  });
+				}
+			testChunkExists();
+		  });
+		} else {
+			  callback(validation, filename, original_filename, identifier);
+		}
+	});
   }
 
 
@@ -163,7 +181,7 @@ module.exports = resumable = function(temporaryFolder){
                   sourceStream.pipe(writableStream, {
                       end: false
                   });
-                  sourceStream.on('end', function() {
+				  sourceStream.on('end', function() {
                       // When the chunk is fully streamed,
                       // jump to the next one
                       pipeChunk(number + 1);
