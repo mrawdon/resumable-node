@@ -216,6 +216,28 @@ module.exports = resumable = function(temporaryFolder, useSubDirectories){
       pipeChunk(1);
   }
 
+	$.validate = function(identifier, totalSize, chunkSize, callback) {
+		var numberOfChunks = Math.max(Math.floor(totalSize/(chunkSize*1.0)), 1);
+		// Iterate over each chunk
+		var checkChunk = function(chunkNumber) {
+			var chunkFilename = getChunkFilename(chunkNumber, identifier);
+			fs.exists(chunkFilename, function(exists) {
+				if (exists) {
+					if(chunkNumber > numberOfChunks){
+						callback('invalid_too_many_chunks');
+						return;
+					}
+					checkChunk(chunkNumber + 1);
+				} else if(chunkNumber === (numberOfChunks + 1)){
+					callback(false, {path: $.getChunkPath(identifier)});
+				}else{
+					callback('missing_chunk');
+				}
+			});
+		}
+		checkChunk(1);
+	}
+
 
   $.clean = function(identifier, options) {
       options = options || {};
