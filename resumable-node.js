@@ -94,6 +94,27 @@ module.exports = resumable = function(temporaryFolder, useSubDirectories){
     }
   }
 
+  $.initialize = function(req, callback){
+	var fields = req.body;
+	var identifier = cleanIdentifier(fields['resumableIdentifier']);
+	var chunkFilePath = $.getChunkPath(identifier);
+	fs.exists(chunkFilePath, function(exists){
+		if(!exists){
+			console.log('Creating ', chunkFilePath);
+			return fs.mkdir(chunkFilePath, function(err, path){
+				if(err){
+					callback(err);
+				}else{
+					callback('done');
+				}
+			});
+		}else{
+			callback('done');
+		}
+	});
+  }
+  
+  
   //'partly_done', filename, original_filename, identifier
   //'done', filename, original_filename, identifier
   //'invalid_resumable_request', null, null, null
@@ -113,9 +134,8 @@ module.exports = resumable = function(temporaryFolder, useSubDirectories){
 	var chunkFilePath = $.getChunkPath(identifier);
 	fs.exists(chunkFilePath, function(exists){
 		if(!exists){
-			return fs.mkdir(chunkFilePath, function(success){
-				$.post(req, callback);
-			});
+			callback('invalid_resumable_request', null, null, null);
+		 	return;
 		}
 		if(!files[$.fileParameterName] || !files[$.fileParameterName].size) {
 		  callback('invalid_resumable_request', null, null, null);
